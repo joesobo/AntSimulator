@@ -9,10 +9,12 @@ public class Ant : MonoBehaviour {
   public float viewRadius = 3;
   public float viewAngle = 45;
   public float interactRadius = 0.05f;
+  public float pheromoneInterval = 0.25f;
   public LayerMask foodLayer;
-  public Transform home;
+  [HideInInspector] public Transform home;
+  [HideInInspector] public AntSpawner antSpawner;
   public Transform head;
-  public Transform pheromonesParent;
+  [HideInInspector] public Transform pheromonesParent;
   public Pheromone homePheromonePrefab;
   public Pheromone foodPheromonePrefab;
 
@@ -24,25 +26,29 @@ public class Ant : MonoBehaviour {
 
   private Vector2 position;
   private Vector2 velocity;
-  private Vector2 desiredDirection = Vector2.right;
+  private Vector2 desiredDirection;
   private Transform targetFood;
   private bool searchingForFood = true;
 
   private void Start() {
     AntCore.ants.Add(this);
+    desiredDirection = new Vector2(Random.Range(-1, 1), Random.Range(-1, 1)).normalized;
     StartCoroutine(SpawnPheromone());
   }
 
   private void Update() {
     HandlePheromoneSteering();
+
+    // random direction offset
+    desiredDirection = (desiredDirection + Random.insideUnitCircle * wanderStrength).normalized;
+
     if (searchingForFood) {
       HandleFood();
     } else {
       HandleHome();
     }
 
-    desiredDirection = (desiredDirection + Random.insideUnitCircle * wanderStrength).normalized;
-
+    // movement calculation
     Vector2 desireVelocity = desiredDirection * maxSpeed;
     Vector2 desiredSteeringForce = (desireVelocity - velocity) * steerStrength;
     Vector2 acceleration = Vector2.ClampMagnitude(desiredSteeringForce, steerStrength) / 1;
@@ -50,8 +56,27 @@ public class Ant : MonoBehaviour {
     velocity = Vector2.ClampMagnitude(velocity + acceleration * Time.deltaTime, maxSpeed);
     position += velocity * Time.deltaTime;
 
+    // move
     float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
     transform.SetPositionAndRotation(position, Quaternion.Euler(0, 0, angle));
+  }
+
+  private void HandlePheromoneSteering() {
+    UpdateSensor(leftSensor);
+    UpdateSensor(centerSensor);
+    UpdateSensor(rightSensor);
+
+    if (leftSensor.value == 0 && centerSensor.value == 0 && rightSensor.value == 0) {
+      return;
+    }
+
+    if (centerSensor.value > Mathf.Max(leftSensor.value, rightSensor.value)) {
+      desiredDirection = transform.right * 1.5f;
+    } else if (leftSensor.value > rightSensor.value) {
+      desiredDirection = transform.right + transform.up * 0.75f;
+    } else {
+      desiredDirection = transform.right + transform.up * -0.75f;
+    }
   }
 
   private void HandleFood() {
@@ -71,27 +96,15 @@ public class Ant : MonoBehaviour {
     } else {
       desiredDirection = (targetFood.position - head.position).normalized;
 
-
       if (Vector2.Distance(targetFood.position, head.position) < interactRadius) {
         targetFood.position = head.position;
         targetFood.parent = head;
         targetFood = null;
         searchingForFood = false;
+
+        // turn around after finding food
+        StartCoroutine(TurnAround());
       }
-    }
-  }
-
-  private void HandlePheromoneSteering() {
-    UpdateSensor(leftSensor);
-    UpdateSensor(centerSensor);
-    UpdateSensor(rightSensor);
-
-    if (centerSensor.value > Mathf.Max(leftSensor.value, rightSensor.value)) {
-      desiredDirection = transform.right * 1.5f;
-    } else if (leftSensor.value > rightSensor.value) {
-      desiredDirection = transform.right + transform.up * 0.75f;
-    } else {
-      desiredDirection = transform.right + transform.up * -0.75f;
     }
   }
 
@@ -109,11 +122,26 @@ public class Ant : MonoBehaviour {
   }
 
   private void HandleHome() {
-    if (Vector2.Distance(home.position, head.position) < 1) {
+    if (Vector2.Distance(home.position, head.position) < viewRadius) {
+      Vector2 dirToHome = (home.position - head.position).normalized;
+
+      // only target food in view angle
+      if (Vector2.Angle(transform.right, dirToHome) < viewAngle / 2) {
+        desiredDirection = dirToHome;
+      }
+    }
+
+    if (Vector2.Distance(home.position, head.position) < interactRadius) {
+      // drop off food
+      antSpawner.AddFood(1);
+
       foreach (Transform child in head) {
         Destroy(child.gameObject);
       }
       searchingForFood = true;
+
+      // turn around and start finding food
+      StartCoroutine(TurnAround());
     }
   }
 
@@ -128,7 +156,19 @@ public class Ant : MonoBehaviour {
         foodPheromone.createTime = Time.time;
         AntCore.foodMarkers.Add(foodPheromone);
       }
-      yield return new WaitForSeconds(.25f);
+      yield return new WaitForSeconds(pheromoneInterval);
+    }
+  }
+
+  IEnumerator TurnAround() {
+    float counter = 0;
+
+    while (counter <= 0.75f) {
+      counter += Time.deltaTime;
+
+      desiredDirection = transform.right + transform.up * -0.75f;
+
+      yield return null;
     }
   }
 }
