@@ -9,7 +9,7 @@ public class PheromoneMap {
     List<Pheromone> foundPheromones = new List<Pheromone>();
 
     foreach (Pheromone pheromone in pheromones) {
-      if (Vector2.Distance(position, pheromone.transform.position) < radius) {
+      if (Vector2.Distance(position, pheromone.transform.position) < radius + pheromone.radius) {
         foundPheromones.Add(pheromone);
       }
     }

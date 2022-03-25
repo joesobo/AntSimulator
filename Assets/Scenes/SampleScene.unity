@@ -13863,7 +13863,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   antPrefab: {fileID: 6202022891024414711, guid: 2a47f42670c6a4851a1617e8c6d079be, type: 3}
   pheromonesParent: {fileID: 2090905026}
-  numAnts: 20
+  numAnts: 10
   foodCountText: {fileID: 289000965}
 --- !u!4 &1472962264
 Transform:

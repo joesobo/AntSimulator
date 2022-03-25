@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 
 public class Pheromone : MonoBehaviour {
+  public float radius = 0.2f;
   public float createTime;
   public AntCoreScriptableObject AntCore;
   private SpriteRenderer spriteRenderer;
@@ -19,5 +20,8 @@ public class Pheromone : MonoBehaviour {
       AntCore.RemovePheromone(this);
       Destroy(gameObject);
     }
+
+    transform.localScale = Vector3.one * radius;
+    radius = Mathf.Max(aliveTime / AntCore.pheromoneEvaporationTime, 0.2f);
   }
 }
