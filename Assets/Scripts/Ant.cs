@@ -10,7 +10,9 @@ public class Ant : MonoBehaviour {
   public float viewAngle = 45;
   public float interactRadius = 0.05f;
   public float pheromoneInterval = 0.25f;
+  public float turnTime = 0.75f;
   public LayerMask foodLayer;
+  public LayerMask collisionLayer;
   [HideInInspector] public Transform home;
   [HideInInspector] public AntSpawner antSpawner;
   public Transform head;
@@ -29,6 +31,10 @@ public class Ant : MonoBehaviour {
   private Vector2 desiredDirection;
   private Transform targetFood;
   private bool searchingForFood = true;
+  private Vector2 lastCollisionNormal = Vector2.zero;
+
+  private bool turnLeft = false;
+  private bool turnRight = false;
 
   private void Start() {
     AntCore.ants.Add(this);
@@ -47,6 +53,8 @@ public class Ant : MonoBehaviour {
     } else {
       HandleHome();
     }
+
+    HandleCollision();
 
     // movement calculation
     Vector2 desireVelocity = desiredDirection * maxSpeed;
@@ -73,9 +81,9 @@ public class Ant : MonoBehaviour {
     if (centerSensor.value > Mathf.Max(leftSensor.value, rightSensor.value)) {
       desiredDirection = transform.right * 1.5f;
     } else if (leftSensor.value > rightSensor.value) {
-      desiredDirection = transform.right + transform.up * 0.75f;
+      desiredDirection = transform.right * 0.75f + transform.up * 0.75f;
     } else {
-      desiredDirection = transform.right + transform.up * -0.75f;
+      desiredDirection = transform.right * 0.75f + transform.up * -0.75f;
     }
   }
 
@@ -145,6 +153,54 @@ public class Ant : MonoBehaviour {
     }
   }
 
+  private void HandleCollision() {
+    Vector2 headPosition = (Vector2)(head.position);
+
+    // cast 2 ray cast out at angle from front of ant
+    RaycastHit2D hitLeft = Physics2D.Raycast(headPosition, (headPosition - (Vector2)transform.position + (Vector2)(transform.right + transform.up * 0.85f)) * 0.75f, 1f, collisionLayer);
+    RaycastHit2D hitRight = Physics2D.Raycast(headPosition, (headPosition - (Vector2)transform.position + (Vector2)(transform.right + transform.up * -0.85f)) * 0.75f, 1f, collisionLayer);
+
+    if (hitLeft.collider != null) {
+      turnRight = true;
+      turnLeft = false;
+    } else if (hitRight.collider != null) {
+      turnLeft = true;
+      turnRight = false;
+    }
+
+    // if any of the rays hit a wall
+    if (turnLeft || turnRight) {
+      RaycastHit2D hit = turnLeft ? hitLeft : hitRight;
+      // find the normal of the hit point
+      lastCollisionNormal = hit.normal;
+
+      Vector3 incomingVec = hit.point - headPosition;
+
+      // Use the point's normal to calculate the reflection vector.
+      Vector3 reflectVec = Vector3.Reflect(incomingVec, hit.normal).normalized;
+
+      // Draw lines to show the incoming "beam" and the reflection.
+      lastCollisionNormal = reflectVec;
+    }
+
+    // TODO: implement turning speed based on proximity to collision
+    if (lastCollisionNormal != Vector2.zero) {
+      // pick direction to turn
+      desiredDirection = turnLeft ? transform.up : -transform.up;
+
+      // continue turning until the last normal direction matches one of the 2 ray cast directions
+      if (
+        Vector2.Distance((Vector2)(transform.right + transform.up * 0.85f).normalized, lastCollisionNormal.normalized) < 0.1f ||
+        Vector2.Distance((Vector2)(transform.right + transform.up * -0.85f).normalized, lastCollisionNormal.normalized) < 0.1f
+      ) {
+        // reset back to zero
+        lastCollisionNormal = Vector2.zero;
+        turnLeft = false;
+        turnRight = false;
+      }
+    }
+  }
+
   IEnumerator SpawnPheromone() {
     while (true) {
       if (searchingForFood) {
@@ -163,12 +219,31 @@ public class Ant : MonoBehaviour {
   IEnumerator TurnAround() {
     float counter = 0;
 
-    while (counter <= 0.75f) {
+    while (counter <= turnTime) {
       counter += Time.deltaTime;
 
-      desiredDirection = transform.right + transform.up * -0.75f;
+      desiredDirection = -transform.up;
 
       yield return null;
+    }
+  }
+
+  private void OnDrawGizmos() {
+    Vector2 headPosition = (Vector2)(head.position);
+
+    // antennae collision view
+    Gizmos.color = Color.green;
+    Gizmos.DrawRay(headPosition, (headPosition - (Vector2)transform.position + (Vector2)(transform.right + transform.up * 0.85f) * 0.75f));
+    Gizmos.DrawRay(headPosition, (headPosition - (Vector2)transform.position + (Vector2)(transform.right + transform.up * -0.85f) * 0.75f));
+
+    // area of avoidance
+    Gizmos.color = Color.white;
+    Gizmos.DrawWireSphere(transform.position, 0.4f);
+
+    // last collision normal
+    if (lastCollisionNormal != Vector2.zero) {
+      Gizmos.color = Color.yellow;
+      Gizmos.DrawRay(headPosition, (headPosition - (Vector2)transform.position + lastCollisionNormal) * 1.75f);
     }
   }
 }
